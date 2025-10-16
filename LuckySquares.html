@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Lucky Squares</title>
+  <style>
+    :root { --bg:#f7f8fc; --ink:#333; --good:#8fd3fe; --rare:#ffd59e; --combo:#ff8c94; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--ink); }
+    .wrap { max-width:420px; margin:0 auto; height:100dvh; padding:16px; display:flex; flex-direction:column; gap:12px; }
+    .card { background:white; border-radius:16px; box-shadow:0 6px 18px rgba(0,0,0,.06); padding:14px 16px; }
+    .top { display:flex; align-items:center; justify-content:space-between; }
+    .btn { background:#111; color:#fff; border:none; padding:10px 14px; border-radius:12px; font-weight:700; cursor:pointer; }
+    .hud { display:flex; gap:10px; align-items:center; font-weight:700; }
+    .stage { position:relative; flex:1; border-radius:18px; overflow:hidden; background:linear-gradient(180deg,#fff,#f1f4ff); }
+    .sq {
+      position:absolute; width:48px; height:48px; border-radius:12px; background:var(--good);
+      box-shadow:0 4px 12px rgba(0,0,0,.1); cursor:pointer; display:grid; place-items:center; font-weight:800;
+      user-select:none; -webkit-user-select:none; touch-action:manipulation; transition:transform .05s;
+    }
+    .sq:active { transform:scale(.95); }
+    .sq.rare { background:var(--rare); animation: twinkle .9s infinite alternate; }
+    @keyframes twinkle { from{ filter:brightness(1);} to{ filter:brightness(1.25);} }
+    .particle {
+      position: absolute; width: 8px; height: 8px; background: var(--good); border-radius: 50%;
+      animation: particle-fade .5s forwards; pointer-events: none;
+    }
+    @keyframes particle-fade {
+      from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      to { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+    }
+    .combo { color: var(--combo); font-weight: 800; animation: combo-pop .3s ease-in-out; }
+    @keyframes combo-pop {
+      from { transform: scale(1); }
+      to { transform: scale(1.2); }
+    }
+    .center { text-align:center; padding:10px 0; }
+    .muted { opacity:.6; font-size:.9rem; }
+
+    @media (orientation: landscape) {
+      .sq { width: 56px; height: 56px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card top">
+      <div class="hud">
+        <div>점수: <span id="score">0</span></div>
+        <div>남은시간: <span id="time">30</span>s</div>
+      </div>
+      <button id="startBtn" class="btn">시작</button>
+    </div>
+
+    <div id="stage" class="stage card"></div>
+
+    <div class="card center muted">
+      귀여운 사각형을 탭해 점수를 모으세요! (레어=+3, 3콤보=+5)
+    </div>
+
+    <div class="card">
+      <h3>🏆 로컬 스코어보드</h3>
+      <ul id="scoreboard" class="muted"></ul>
+    </div>
+  </div>
+
+  <audio id="sfx" preload="auto">
+    <source src="data:audio/mp3;base64,//uQZAAAAAAAAAAAAAAAAAAAA..." type="audio/mp3">
+  </audio>
+
+  <script>
+    const stage = document.getElementById('stage');
+    const scoreEl = document.getElementById('score');
+    const timeEl = document.getElementById('time');
+    const startBtn = document.getElementById('startBtn');
+    const sfx = document.getElementById('sfx');
+    const scoreboardEl = document.getElementById('scoreboard');
+
+    let playing = false, timeLeft = 30, score = 0, loopId = null, timerId = null;
+    let comboCount = 0, lastHitTime = 0;
+
+    function rand(min, max){ return Math.random()*(max-min)+min; }
+
+    function spawnSquare(){
+      if(!playing) return;
+      const sq = document.createElement('div');
+      sq.className = 'sq' + (Math.random()<0.15 ? ' rare' : '');
+      const rect = stage.getBoundingClientRect();
+      const pad = 56; // 사각형 크기 + 여유
+      const x = rand(0, rect.width - pad);
+      const y = rand(0, rect.height - pad);
+      sq.style.left = x + 'px';
+      sq.style.top = y + 'px';
+      sq.textContent = '■';
+      const value = sq.classList.contains('rare') ? 3 : 1;
+
+      const removeLater = setTimeout(()=> sq.remove(), 1200); // 1.2초 후 사라짐
+
+      sq.addEventListener('pointerdown', (e)=>{
+        score += value;
+        scoreEl.textContent = score;
+
+        // Handle combo system
+        const now = Date.now();
+        if (now - lastHitTime < 3000) {
+          comboCount++;
+          if (comboCount === 3) {
+            score += 5;
+            scoreEl.textContent = score;
+            showComboMessage();
+            comboCount = 0;
+          }
+        } else {
+          comboCount = 1;
+        }
+        lastHitTime = now;
+
+        showParticle(e.clientX, e.clientY);
+        try { sfx.currentTime = 0; sfx.play(); } catch(err) {}
+        sq.remove();
+        clearTimeout(removeLater);
+      });
+
+      stage.appendChild(sq);
+    }
+
+    function showParticle(x, y) {
+      const particle = document.createElement('div');
+      particle.className = 'particle';
+      particle.style.left = `${x}px`;
+      particle.style.top = `${y}px`;
+      document.body.appendChild(particle);
+      setTimeout(() => particle.remove(), 500);
+    }
+
+    function showComboMessage() {
+      const msg = document.createElement('div');
+      msg.className = 'combo';
+      msg.textContent = '3콤보 +5!';
+      stage.appendChild(msg);
+      setTimeout(() => msg.remove(), 1000);
+    }
+
+    function gameLoop(){
+      spawnSquare();
+      const next = rand(250, 650); // 랜덤 스폰 간격
+      loopId = setTimeout(gameLoop, next);
+    }
+
+    function startGame(){
+      if(playing) return;
+      playing = true; score = 0; timeLeft = 30;
+      scoreEl.textContent = '0'; timeEl.textContent = '30';
+      stage.innerHTML = '';
+      gameLoop();
+      timerId = setInterval(()=>{
+        timeLeft--;
+        timeEl.textContent = timeLeft;
+        if(timeLeft<=0) endGame();
+      }, 1000);
+    }
+
+    function endGame(){
+      playing = false;
+      clearTimeout(loopId); clearInterval(timerId);
+      saveScore(score);
+      alert(`게임 종료! 점수: ${score}`);
+    }
+
+    function saveScore(newScore) {
+      const scores = JSON.parse(localStorage.getItem('scores') || '[]');
+      scores.push(newScore);
+      scores.sort((a, b) => b - a);
+      localStorage.setItem('scores', JSON.stringify(scores.slice(0, 5)));
+      updateScoreboard(scores);
+    }
+
+    function updateScoreboard(scores) {
+      scoreboardEl.innerHTML = '';
+      scores.slice(0, 5).forEach((score, idx) => {
+        const li = document.createElement('li');
+        li.textContent = `${idx + 1}. ${score}점`;
+        if (idx === 0 && score === scores[0]) {
+          li.textContent += ' 🏅';
+        }
+        scoreboardEl.appendChild(li);
+      });
+    }
+
+    startBtn.addEventListener('click', startGame);
+    // 모바일 전체화면 터치 반응 개선
+    stage.addEventListener('touchmove', (e)=>e.preventDefault(), {passive:false});
+
+    // 초기화
+    updateScoreboard(JSON.parse(localStorage.getItem('scores') || '[]'));
+  </script>
+</body>
+</html>
