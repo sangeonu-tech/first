@@ -1,0 +1,595 @@
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Canvas, useFrame } from "@react-three/fiber";
+import { Html } from "@react-three/drei";
+import * as THREE from "three";
+
+/**
+ * Loop Run: Tower of Luck (3D) — Mobile-first
+ * --------------------------------------------------------------
+ * 변경 요약(모바일 최적화):
+ * - 터치 컨트롤: 화면 좌/우 터치로 회전, 하단 대쉬 버튼, 보스 룰렛 버튼 유지
+ * - DPR 제한: dpr={[1,1.5]}로 발열/배터리 절약
+ * - UI 크기/간격 모바일 기준 재조정, 터치 영역(투명) 추가
+ * - 즉시 재시작/스킨/진행도/광고/IAP 훅 그대로 유지
+ * - 키보드(WASD/화살표/Space)도 데스크톱에서 그대로 동작
+ *
+ * 조작(모바일):
+ * - 화면 왼쪽 터치: 좌회전 / 화면 오른쪽 터치: 우회전
+ * - 하단 [대쉬] 버튼: Space와 동일
+ * - [보스 룰렛] 버튼: 보스층에서 코인 5개 소모, 60% 확률
+ */
+
+/***********************
+ * 유틸 & 상수
+ ***********************/
+const TAU = Math.PI * 2;
+const FLOOR_HEIGHT = 3; // 1층 높이(m)
+const TRACK_RADIUS = 4.2; // 원형 트랙 반지름
+const SEGMENTS_PER_FLOOR = 10; // 한 층에서 배치 슬롯 개수
+const OBSTACLE_RATE = 0.25; // 장애물 스폰 확률
+const COIN_RATE = 0.35; // 코인 스폰 확률
+const CLOVER_RATE = 0.05; // 행운 아이템 스폰 확률
+const BASE_ASCEND_SPEED = 2.0; // 초당 상승 m/s
+const TURN_SPEED = 1.8; // 좌우 회전 속도 (rad/s)
+const DASH_COOLDOWN = 1.2; // 초단위
+const BOSS_FLOOR_INTERVAL = 33;
+const RNG = (seed = 1) => {
+  // xorshift32 기반 간단 시드 RNG
+  let x = seed >>> 0;
+  return () => {
+    x ^= x << 13; x ^= x >>> 17; x ^= x << 5;
+    return (x >>> 0) / 0xffffffff;
+  };
+};
+
+function useKeyPress() {
+  const pressed = useRef({});
+  useEffect(() => {
+    const onDown = (e) => { pressed.current[e.code] = true; };
+    const onUp = (e) => { pressed.current[e.code] = false; };
+    window.addEventListener("keydown", onDown);
+    window.addEventListener("keyup", onUp);
+    return () => { window.removeEventListener("keydown", onDown); window.removeEventListener("keyup", onUp); };
+  }, []);
+  return pressed;
+}
+
+/***********************
+ * 진행도 & 상점 (로컬 저장)
+ ***********************/
+const STORAGE_KEY = "looprun_progress_v1";
+function loadProgress() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch { return null; }
+}
+function saveProgress(p) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(p)); } catch {}
+}
+
+const SKINS = [
+  { id: "default", name: "기본 허접이", cond: { type: "always" }, price: 0 },
+  { id: "golden", name: "금빛 허접이", cond: { type: "coins", n: 100 }, price: 0 },
+  { id: "neon", name: "형광 허접이", cond: { type: "floor", n: 100 }, price: 0 },
+  { id: "clover", name: "클로버 허접이", cond: { type: "luckWin", n: 3 }, price: 0 },
+  { id: "pirate", name: "해적 허접이", cond: { type: "buy", sku: "skin_pirate", priceKRW: 1000 }, price: 1000 },
+];
+
+function evaluateSkins(progress) {
+  const unlocked = new Set(progress.unlockedSkins || ["default"]);
+  const flags = { coins: progress.totalCoins || 0, floor: progress.bestFloor || 0, luckWin: progress.luckBossWins || 0 };
+  SKINS.forEach(s => {
+    if (unlocked.has(s.id)) return;
+    const c = s.cond;
+    if (c.type === "always") unlocked.add(s.id);
+    if (c.type === "coins" && flags.coins >= c.n) unlocked.add(s.id);
+    if (c.type === "floor" && flags.floor >= c.n) unlocked.add(s.id);
+    if (c.type === "luckWin" && flags.luckWin >= c.n) unlocked.add(s.id);
+    if (c.type === "buy" && progress.purchasedSkus?.includes?.(c.sku)) unlocked.add(s.id);
+  });
+  return Array.from(unlocked);
+}
+
+/***********************
+ * 상점/IAP 스텁
+ ***********************/
+function useIAP() {
+  const buy = async (sku, priceKRW) => {
+    const ok = window.confirm(`테스트 결제: ${sku}를 \${priceKRW}에 구매하시겠어요? (모의)`);
+    return ok;
+  };
+  const showRewardedAd = async () => {
+    const ok = window.confirm("리워드 광고를 시청했다고 가정할까요? (모의)");
+    return ok;
+  };
+  return { buy, showRewardedAd };
+}
+
+/***********************
+ * 레벨/스폰러
+ ***********************/
+function generateRingLayout(rng) {
+  const r = rng();
+  if (r < CLOVER_RATE) return "clover";
+  if (r < CLOVER_RATE + COIN_RATE) return "coin";
+  if (r < CLOVER_RATE + COIN_RATE + OBSTACLE_RATE) return "obstacle";
+  return "none";
+}
+
+function useSpawner(seed) {
+  const rng = useMemo(() => RNG(seed), [seed]);
+  const getRing = (floorIndex) => {
+    if ((floorIndex + 1) % BOSS_FLOOR_INTERVAL === 0) {
+      return { type: "boss", items: Array(SEGMENTS_PER_FLOOR).fill("coin") };
+    }
+    const items = new Array(SEGMENTS_PER_FLOOR).fill(0).map(() => generateRingLayout(rng));
+    return { type: "normal", items };
+  };
+  return { getRing };
+}
+
+/***********************
+ * 3D 파츠
+ ***********************/
+function JankyDude({ skin = "default" }) {
+  const group = useRef();
+  const bodyColor = skin === "golden" ? "#f2c94c"
+                      : skin === "neon" ? "#60a5fa"
+                      : skin === "clover" ? "#34d399"
+                      : skin === "pirate" ? "#111827"
+                      : "#d1d5db";
+  const accent = skin === "pirate" ? "#ef4444" : "#111827";
+  return (
+    <group ref={group}>
+      <mesh position={[0, 0.6, 0]} frustumCulled={false}>
+        <boxGeometry args={[0.8, 1.2, 0.4]} />
+        <meshStandardMaterial color={bodyColor} roughness={0.9} metalness={skin==="golden"?0.5:0.1} />
+      </mesh>
+      <mesh position={[0, 1.5, 0]}>
+        <sphereGeometry args={[0.35, 12, 12]} />
+        <meshStandardMaterial color="#ffffff" roughness={0.8} />
+      </mesh>
+      <mesh position={[-0.1, 1.55, 0.29]}>
+        <circleGeometry args={[0.05, 16]} />
+        <meshStandardMaterial color={accent} />
+      </mesh>
+      <mesh position={[0.15, 1.52, 0.29]}>
+        <circleGeometry args={[0.05, 16]} />
+        <meshStandardMaterial color={accent} />
+      </mesh>
+      <mesh position={[-0.2, 0.0, 0]}>
+        <boxGeometry args={[0.15, 0.6, 0.15]} />
+        <meshStandardMaterial color="#6b7280" />
+      </mesh>
+      <mesh position={[0.2, 0.0, 0]}>
+        <boxGeometry args={[0.15, 0.6, 0.15]} />
+        <meshStandardMaterial color="#6b7280" />
+      </mesh>
+      {skin === "pirate" && (
+        <mesh position={[0, 1.6, 0]} rotation={[0,0,0.1]}>
+          <boxGeometry args={[0.7, 0.1, 0.1]} />
+          <meshStandardMaterial color={accent} />
+        </mesh>
+      )}
+    </group>
+  );
+}
+
+function Coin({ position = [0,0,0] }) {
+  const ref = useRef();
+  useFrame((_, dt) => { if (ref.current) ref.current.rotation.y += dt * 2; });
+  return (
+    <group position={position}>
+      <mesh ref={ref}>
+        <torusGeometry args={[0.18, 0.07, 12, 24]} />
+        <meshStandardMaterial color="#fbbf24" metalness={0.6} roughness={0.3} />
+      </mesh>
+    </group>
+  );
+}
+function Clover({ position=[0,0,0] }) {
+  const ref = useRef();
+  useFrame((_, dt) => { if (ref.current) ref.current.rotation.y += dt * 1.2; });
+  return (
+    <group position={position} ref={ref}>
+      <mesh>
+        <sphereGeometry args={[0.15, 12, 12]} />
+        <meshStandardMaterial color="#10b981" />
+      </mesh>
+    </group>
+  );
+}
+function Obstacle({ position=[0,0,0] }) {
+  return (
+    <mesh position={position}>
+      <boxGeometry args={[0.7, 0.7, 0.7]} />
+      <meshStandardMaterial color="#ef4444" roughness={0.6} />
+    </mesh>
+  );
+}
+function BossGate({ y }) {
+  return (
+    <group position={[0, y + 1.2, 0]}>
+      <mesh rotation={[Math.PI/2, 0, 0]}>
+        <torusGeometry args={[TRACK_RADIUS * 0.9, 0.35, 12, 48]} />
+        <meshStandardMaterial color="#8b5cf6" metalness={0.2} roughness={0.6} />
+      </mesh>
+      <mesh position={[-1.5, 1.4, TRACK_RADIUS*0.9-0.2]}>
+        <sphereGeometry args={[0.25, 12, 12]} />
+        <meshStandardMaterial color="#111827" />
+      </mesh>
+      <mesh position={[1.5, 1.4, TRACK_RADIUS*0.9-0.2]}>
+        <sphereGeometry args={[0.25, 12, 12]} />
+        <meshStandardMaterial color="#111827" />
+      </mesh>
+    </group>
+  );
+}
+function Tower({ windowFloors = 80, baseFloor = 0 }) {
+  const group = useRef();
+  const pillars = useMemo(() => {
+    const arr = [];
+    for (let i = 0; i < windowFloors; i++) {
+      const y = (baseFloor + i) * FLOOR_HEIGHT;
+      arr.push({ y });
+    }
+    return arr;
+  }, [windowFloors, baseFloor]);
+  return (
+    <group ref={group}>
+      {pillars.map((p, i) => (
+        <mesh key={i} position={[0, p.y, 0]} rotation={[Math.PI/2, 0, 0]}>
+          <ringGeometry args={[TRACK_RADIUS*0.95, TRACK_RADIUS*1.05, 48]} />
+          <meshStandardMaterial color={i%2===0?"#e5e7eb":"#f3f4f6"} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+/***********************
+ * 게임 루프
+ ***********************/
+function Scene3D({ running, onHit, onCollectCoin, onCollectClover, seed, floorRef, bossState, onBossEnter, skin }) {
+  const pressed = useKeyPress();
+  const { getRing } = useSpawner(seed);
+
+  // 플레이어 상태
+  const theta = useRef(0); // 각도
+  const y = useRef(0); // 높이
+  const speedY = useRef(BASE_ASCEND_SPEED);
+  const dash = useRef({ cd: 0 });
+
+  // 스폰 캐시
+  const ringsRef = useRef(new Map());
+
+  // 카메라
+  const camRef = useRef();
+  const playerRef = useRef();
+
+  const playerPos = () => new THREE.Vector3(Math.cos(theta.current) * TRACK_RADIUS, y.current + 1.2, Math.sin(theta.current) * TRACK_RADIUS);
+
+  useFrame((state, dt) => {
+    if (!running) return;
+    // 입력(키보드)
+    const left = pressed.current["ArrowLeft"] || pressed.current["KeyA"] || pressed.current.__touchLeft;
+    const right = pressed.current["ArrowRight"] || pressed.current["KeyD"] || pressed.current.__touchRight;
+    if (left) theta.current -= TURN_SPEED * dt;
+    if (right) theta.current += TURN_SPEED * dt;
+
+    if (dash.current.cd > 0) dash.current.cd -= dt;
+    const dashPressed = pressed.current["Space"] || pressed.current.__touchDash;
+    if (dashPressed && dash.current.cd <= 0) {
+      y.current += 2.2;
+      dash.current.cd = DASH_COOLDOWN;
+      pressed.current.__touchDash = false; // 원탭 처리
+    }
+
+    // 상승
+    y.current += speedY.current * dt;
+
+    // 층
+    const currentFloor = Math.floor(y.current / FLOOR_HEIGHT);
+    floorRef.current = currentFloor + 1;
+
+    // 보스 체크
+    const bossFloor = (currentFloor + 1) % BOSS_FLOOR_INTERVAL === 0;
+    if (bossFloor && bossState.current === "none") {
+      bossState.current = "entered";
+      onBossEnter(currentFloor + 1);
+    }
+
+    // 카메라 추적
+    if (camRef.current) {
+      const p = playerPos();
+      camRef.current.position.lerp(new THREE.Vector3(p.x, p.y + 4.0, p.z + 6.5), 0.15);
+      camRef.current.lookAt(p.x, p.y, p.z);
+    }
+
+    // 충돌/수집 체크
+    const ringIndex = currentFloor;
+    if (!ringsRef.current.has(ringIndex)) ringsRef.current.set(ringIndex, getRing(ringIndex));
+    const ring = ringsRef.current.get(ringIndex);
+
+    let a = theta.current % TAU; if (a < 0) a += TAU;
+    const seg = Math.floor((a / TAU) * SEGMENTS_PER_FLOOR);
+
+    if (ring.type === "boss") {
+      if (bossState.current !== "cleared") {
+        const gateY = ringIndex * FLOOR_HEIGHT;
+        if (Math.abs(y.current - gateY - 1.2) < 0.6) {
+          onHit("boss");
+        }
+      }
+    } else {
+      const item = ring.items[seg];
+      if (item && item !== "none") {
+        if (Math.abs((y.current % FLOOR_HEIGHT) - 1.2) < 0.5) {
+          if (item === "coin") { onCollectCoin(); ring.items[seg] = "none"; }
+          else if (item === "clover") { onCollectClover(); ring.items[seg] = "none"; }
+          else if (item === "obstacle") { onHit("obstacle"); }
+        }
+      }
+    }
+
+    // 플레이어 위치
+    if (playerRef.current) {
+      const p = playerPos();
+      playerRef.current.position.copy(p);
+      playerRef.current.lookAt(0, p.y, 0);
+    }
+  });
+
+  const currentBaseFloor = Math.max(0, Math.floor(y.current / FLOOR_HEIGHT) - 5);
+
+  return (
+    <>
+      <perspectiveCamera ref={camRef} position={[0, 4, 10]} fov={55} />
+      <ambientLight intensity={0.7} />
+      <directionalLight position={[5, 10, 5]} intensity={0.8} />
+
+      <Tower windowFloors={80} baseFloor={currentBaseFloor} />
+
+      {Array.from({ length: 100 }).map((_, i) => {
+        const rIndex = currentBaseFloor + i;
+        if (!ringsRef.current.has(rIndex)) ringsRef.current.set(rIndex, getRing(rIndex));
+        const ring = ringsRef.current.get(rIndex);
+        const baseY = rIndex * FLOOR_HEIGHT + 1.2;
+        const nodes = [];
+        if (ring.type === "boss") {
+          nodes.push(<BossGate key={`boss-${rIndex}`} y={rIndex*FLOOR_HEIGHT} />);
+        } else {
+          for (let s = 0; s < SEGMENTS_PER_FLOOR; s++) {
+            const ang = (s / SEGMENTS_PER_FLOOR) * TAU;
+            const x = Math.cos(ang) * TRACK_RADIUS;
+            const z = Math.sin(ang) * TRACK_RADIUS;
+            const item = ring.items[s];
+            const k = `${rIndex}-${s}`;
+            if (item === "coin") nodes.push(<Coin key={`c-${k}`} position={[x, baseY, z]} />);
+            if (item === "clover") nodes.push(<Clover key={`l-${k}`} position={[x, baseY, z]} />);
+            if (item === "obstacle") nodes.push(<Obstacle key={`o-${k}`} position={[x, baseY, z]} />);
+          }
+        }
+        return nodes;
+      })}
+
+      <group>
+        <group>
+          <JankyDude skin={skin} />
+        </group>
+      </group>
+    </>
+  );
+}
+
+/***********************
+ * 메인 컴포넌트
+ ***********************/
+export default function App() {
+  const [running, setRunning] = useState(false);
+  const [seed, setSeed] = useState(() => Math.floor(Math.random() * 999999) + 1);
+  const [coins, setCoins] = useState(0);
+  const [cloverBuff, setCloverBuff] = useState({ active: false, until: 0 });
+  const [hudMsg, setHudMsg] = useState("");
+  const [skin, setSkin] = useState("default");
+
+  const floorRef = useRef(1);
+  const bossState = useRef("none");
+
+  const [progress, setProgress] = useState(() => {
+    const p = loadProgress();
+    return p || { bestFloor: 0, totalCoins: 0, luckBossWins: 0, purchasedSkus: [], unlockedSkins: ["default"], lastSkin: "default" };
+  });
+
+  useEffect(() => {
+    const unlocked = evaluateSkins(progress);
+    if (!unlocked.includes(progress.lastSkin)) setSkin("default");
+    else setSkin(progress.lastSkin || "default");
+    saveProgress({ ...progress, unlockedSkins: unlocked });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => { saveProgress(progress); }, [progress]);
+
+  const startGame = () => {
+    setCoins(0);
+    setCloverBuff({ active: false, until: 0 });
+    setHudMsg("");
+    bossState.current = "none";
+    setSeed(Math.floor(Math.random() * 999999) + 1);
+    setRunning(true);
+  };
+  const endGame = (reason = "hit") => {
+    setRunning(false);
+    const floor = floorRef.current;
+    setProgress(p => ({ ...p, bestFloor: Math.max(p.bestFloor || 0, floor), totalCoins: (p.totalCoins || 0) + coins }));
+    setHudMsg(reason === "boss" ? "보스에게 튕겨났어요! 룰렛으로 뚫어보자" : "으악! 부딪혔어요");
+  };
+
+  const onHit = (type) => {
+    if (cloverBuff.active && Date.now() < cloverBuff.until) return; // 무적
+    endGame(type === "boss" ? "boss" : "hit");
+  };
+  const onCollectCoin = () => setCoins(c => c + 1);
+  const onCollectClover = () => {
+    setCloverBuff({ active: true, until: Date.now() + 4000 });
+    setHudMsg("클로버! 잠깐 무적✨");
+    setTimeout(() => setHudMsg(""), 1200);
+  };
+
+  const doBossLuck = () => {
+    const floor = floorRef.current;
+    if (floor % BOSS_FLOOR_INTERVAL !== 0) {
+      setHudMsg("보스층에서만 사용 가능"); setTimeout(() => setHudMsg(""), 900); return;
+    }
+    if (coins < 5) { setHudMsg("코인 5개 필요"); setTimeout(() => setHudMsg(""), 900); return; }
+    setCoins(c => c - 5);
+    const win = Math.random() < 0.6;
+    if (win) {
+      bossState.current = "cleared";
+      setHudMsg("행운의 대성공! 게이트 OPEN💥");
+      setTimeout(() => setHudMsg(""), 1200);
+      setProgress(p => ({ ...p, luckBossWins: (p.luckBossWins||0) + 1 }));
+    } else {
+      setHudMsg("앗, 꽝! 다시 도전");
+      setTimeout(() => setHudMsg(""), 900);
+    }
+  };
+
+  // 상점/스킨
+  const { buy, showRewardedAd } = useIAP();
+  const unlocked = evaluateSkins(progress);
+  const equipSkin = (id) => { if (unlocked.includes(id)) { setSkin(id); setProgress(p => ({ ...p, lastSkin: id, unlockedSkins: unlocked })); } };
+  const purchaseSkin = async (skinId) => {
+    const s = SKINS.find(x => x.id === skinId);
+    if (!s || s.cond?.type !== "buy") return;
+    const ok = await buy(s.cond.sku, s.cond.priceKRW);
+    if (ok) setProgress(p => ({ ...p, purchasedSkus: [...(p.purchasedSkus||[]), s.cond.sku] }));
+  };
+  const claimAdCoins = async () => { const ok = await showRewardedAd(); if (ok) setCoins(c => c + 10); };
+
+  // 터치 컨트롤: 좌/우 패드 + 대쉬 버튼
+  const pressed = useKeyPress();
+  const touchLeftRef = useRef(false);
+  const touchRightRef = useRef(false);
+
+  const onTouchStart = (e) => {
+    for (const t of e.changedTouches) {
+      const x = t.clientX; const w = window.innerWidth;
+      if (x < w * 0.5) touchLeftRef.current = true; else touchRightRef.current = true;
+    }
+    pressed.current.__touchLeft = touchLeftRef.current;
+    pressed.current.__touchRight = touchRightRef.current;
+  };
+  const onTouchMove = (e) => {
+    // 이동 중 손가락이 좌/우 영역 넘어가면 방향 전환
+    const t = e.touches[0]; if (!t) return;
+    const x = t.clientX; const w = window.innerWidth;
+    touchLeftRef.current = x < w * 0.5; touchRightRef.current = !touchLeftRef.current;
+    pressed.current.__touchLeft = touchLeftRef.current;
+    pressed.current.__touchRight = touchRightRef.current;
+  };
+  const onTouchEnd = () => {
+    touchLeftRef.current = false; touchRightRef.current = false;
+    pressed.current.__touchLeft = false; pressed.current.__touchRight = false;
+  };
+
+  const doDash = () => { pressed.current.__touchDash = true; setTimeout(() => (pressed.current.__touchDash = false), 80); };
+
+  // iOS 주소창 숨김/안전영역 대응 레이아웃
+  return (
+    <div className="w-full h-dvh bg-[#0b1020] text-white select-none relative" onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
+      {/* 상단 HUD */}
+      <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between p-3">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] opacity-70">층</span>
+          <span className="text-2xl font-bold">{floorRef.current}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="px-2 py-1 bg-[#111827] rounded-xl text-sm">🪙 {coins}</div>
+          {cloverBuff.active && Date.now() < cloverBuff.until && (
+            <div className="px-2 py-1 bg-green-600 rounded-xl text-xs">☘ 무적</div>
+          )}
+        </div>
+      </div>
+
+      {/* 3D 캔버스 */}
+      <Canvas shadows dpr={[1,1.5]}>
+        <color attach="background" args={[0.04, 0.06, 0.12]} />
+        <fog attach="fog" args={[0x0b1020, 10, 100]} />
+        <Scene3D
+          running={running}
+          onHit={onHit}
+          onCollectCoin={onCollectCoin}
+          onCollectClover={onCollectClover}
+          seed={seed}
+          floorRef={floorRef}
+          bossState={bossState}
+          onBossEnter={() => setHudMsg("보스! 룰렛(코인x5)")}
+          skin={skin}
+        />
+        {!running && (
+          <Html center>
+            <div className="flex flex-col items-center gap-3 bg-black/45 backdrop-blur-sm p-4 rounded-2xl shadow-xl w-[86vw] max-w-[420px]">
+              <div className="text-lg font-semibold">Tower of Luck</div>
+              <div className="text-[11px] opacity-80 text-center">좌/우 화면을 터치해 이동 · 하단 대쉬 버튼 · 보스층에서 룰렛</div>
+              <button onClick={startGame} className="px-4 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-400 transition w-full">플레이</button>
+              <div className="text-sm opacity-80 mt-1">Best Floor: {progress.bestFloor||0} · Total Coins: {progress.totalCoins||0}</div>
+              {hudMsg && <div className="text-sm text-yellow-300">{hudMsg}</div>}
+            </div>
+          </Html>
+        )}
+        {hudMsg && running && (
+          <Html position={[0, 5, 0]}>
+            <div className="px-3 py-1 bg-black/40 rounded-full text-sm">{hudMsg}</div>
+          </Html>
+        )}
+      </Canvas>
+
+      {/* 하단 컨트롤 바 (모바일 크기 조정) */}
+      <div className="absolute inset-x-0 bottom-0 z-20 p-3 pb-[max(12px,env(safe-area-inset-bottom))]">
+        <div className="bg-black/35 backdrop-blur-sm rounded-2xl p-3 grid grid-cols-2 gap-3">
+          {/* 스킨/상점 */}
+          <div className="flex flex-col gap-2">
+            <div className="text-[11px] opacity-70">Skin</div>
+            <div className="flex gap-2 flex-wrap">
+              {SKINS.map(s => {
+                const isUnlocked = evaluateSkins(progress).includes(s.id);
+                return (
+                  <button key={s.id}
+                    onClick={() => isUnlocked ? equipSkin(s.id) : purchaseSkin(s.id)}
+                    className={`px-2 py-1 rounded-xl text-[11px] border ${skin===s.id?"bg-white text-black":"bg-black/40"} ${isUnlocked?"border-white/30":"border-yellow-400"}`}>
+                    {s.name}{!isUnlocked && s.cond?.type==="buy"?` (￦${s.cond.priceKRW})`:""}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          {/* 액션 버튼 */}
+          <div className="flex items-center justify-end gap-2">
+            <button onClick={claimAdCoins} className="px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-sm">광고코인+10</button>
+            <button onClick={doBossLuck} className="px-3 py-2 rounded-xl bg-pink-500 hover:bg-pink-400 text-sm">보스 룰렛</button>
+            <button onClick={() => setRunning(false)} className="px-3 py-2 rounded-xl bg-gray-700 text-sm">일시정지</button>
+            <button onClick={startGame} className="px-3 py-2 rounded-xl bg-indigo-600 text-sm">다시</button>
+          </div>
+        </div>
+      </div>
+
+      {/* 좌/우 터치 패드 (투명) */}
+      <div className="absolute inset-x-0 bottom-28 top-14 z-10 flex">
+        <div className="w-1/2 h-full" />
+        <div className="w-1/2 h-full" />
+      </div>
+
+      {/* 대쉬 플로팅 버튼 */}
+      <div className="absolute right-4 bottom-[96px] z-20">
+        <button onClick={doDash} className="px-5 py-4 rounded-full bg-blue-600 active:bg-blue-500 text-base shadow-lg">대쉬</button>
+      </div>
+
+      <div className="absolute left-3 bottom-[96px] z-20 text-[11px] opacity-70">
+        v1.1 (모바일) · 33층마다 보스 · 룰렛 60% · 터치 이동/대쉬
+      </div>
+    </div>
+  );
+}
