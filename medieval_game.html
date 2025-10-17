@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tower of Luck - Medieval Style</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Comic Sans MS', 'Papyrus', cursive;
+            background: linear-gradient(to bottom, #f3e5ab, #e3c16f);
+            color: #5a3e1a;
+        }
+        .hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: rgba(255, 247, 215, 0.9);
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            border-bottom: 3px solid #c29d59;
+            font-size: 1.5em;
+        }
+        .hud span {
+            background: rgba(255, 235, 178, 0.8);
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+        .canvas-container {
+            width: 100%;
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
+        }
+        .menu {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background: rgba(255, 247, 215, 0.95);
+            padding: 20px;
+            border: 3px solid #c29d59;
+            border-radius: 15px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        }
+        .menu button {
+            font-size: 1.2em;
+            margin: 10px;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background: #f3e5ab;
+            border: 2px solid #c29d59;
+            cursor: pointer;
+        }
+        .menu button:hover {
+            background: #e3c16f;
+        }
+        .menu .stats {
+            font-size: 1em;
+            margin-top: 10px;
+            color: #5a3e1a;
+        }
+        .controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(255, 247, 215, 0.9);
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            border-top: 3px solid #c29d59;
+        }
+        .controls button {
+            font-size: 1em;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            background: #f3e5ab;
+            border: 2px solid #c29d59;
+            cursor: pointer;
+        }
+        .controls button:hover {
+            background: #e3c16f;
+        }
+    </style>
+</head>
+<body>
+    <div class="hud">
+        <div>Floor: <span id="floor">1</span></div>
+        <div>Coins: <span id="coins">0</span></div>
+    </div>
+    <div class="canvas-container" id="gameCanvas">
+        <!-- The 3D Canvas will be injected here by Three.js -->
+    </div>
+    <div class="menu" id="mainMenu">
+        <h1>Tower of Luck</h1>
+        <p class="stats">Best Floor: <span id="bestFloor">0</span> | Total Coins: <span id="totalCoins">0</span></p>
+        <button onclick="startGame()">Play</button>
+    </div>
+    <div class="controls">
+        <button onclick="onDash()">Dash</button>
+        <button onclick="pauseGame()">Pause</button>
+        <button onclick="restartGame()">Restart</button>
+    </div>
+
+    <script>
+        // Placeholder for game logic scripts
+        function startGame() {
+            document.getElementById('mainMenu').style.display = 'none';
+            alert('Game Started! Medieval Style');
+        }
+        function onDash() {
+            alert('Dash activated!');
+        }
+        function pauseGame() {
+            alert('Game Paused!');
+        }
+        function restartGame() {
+            alert('Game Restarted!');
+        }
+    </script>
+</body>
+</html>
