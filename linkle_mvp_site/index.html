@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Linkle MVP</title>
+  <script>
+    window.LINKLE_API_BASE_URL = window.LINKLE_API_BASE_URL || '';
+  </script>
+  <style>
+    :root {
+      --bg:#f5f6f8;
+      --card:#ffffff;
+      --ink:#101418;
+      --ink-sub:#5f6c80;
+      --accent:#0056ff;
+      --accent-soft:#e6eeff;
+      --radius:20px;
+      --shadow:0 12px 28px rgba(15,35,95,0.08);
+    }
+    * { box-sizing:border-box; }
+    body {
+      margin:0;
+      font-family:"Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background:var(--bg);
+      color:var(--ink);
+    }
+    .app {
+      max-width:440px;
+      margin:0 auto;
+      min-height:100dvh;
+      background:var(--bg);
+      display:flex;
+      flex-direction:column;
+    }
+    header {
+      padding:28px 24px 60px;
+      background:linear-gradient(180deg,#0c1b3a,#15254f 55%,#162b60);
+      color:#fff;
+      border-bottom-left-radius:32px;
+      border-bottom-right-radius:32px;
+      position:relative;
+      overflow:hidden;
+    }
+    header::after {
+      content:"";
+      position:absolute;
+      inset:auto -60px -120px;
+      height:180px;
+      background:radial-gradient(circle at top,#1b5cff55,transparent 70%);
+    }
+    .topbar {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-bottom:28px;
+      position:relative;
+      z-index:1;
+    }
+    .topbar button {
+      border:none;
+      background:rgba(255,255,255,0.1);
+      color:#fff;
+      padding:8px 14px;
+      border-radius:999px;
+      font-weight:600;
+      display:flex;
+      gap:8px;
+      align-items:center;
+      cursor:pointer;
+      backdrop-filter:blur(6px);
+    }
+    .intro {
+      position:relative;
+      z-index:1;
+    }
+    .intro h1 {
+      margin:0 0 12px;
+      font-size:28px;
+      line-height:1.3;
+      font-weight:700;
+    }
+    .intro p {
+      margin:0;
+      color:rgba(255,255,255,.68);
+      font-size:15px;
+      line-height:1.5;
+    }
+    .screen {
+      margin-top:-36px;
+      padding:0 20px 100px;
+      flex:1;
+    }
+    .section-title {
+      font-size:18px;
+      font-weight:600;
+      margin:32px 4px 12px;
+    }
+    .card {
+      background:var(--card);
+      border-radius:var(--radius);
+      padding:20px;
+      margin-bottom:16px;
+      box-shadow:var(--shadow);
+    }
+    .card h3 {
+      margin:0 0 12px;
+      font-size:17px;
+    }
+    .card-header {
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:16px;
+      margin-bottom:16px;
+    }
+    .card-header h3 {
+      margin:0;
+    }
+    .card-sub {
+      margin:4px 0 0;
+      color:var(--ink-sub);
+      font-size:14px;
+      line-height:1.5;
+    }
+    .primary-btn {
+      border:none;
+      background:var(--accent);
+      color:#fff;
+      padding:10px 16px;
+      border-radius:12px;
+      font-weight:600;
+      cursor:pointer;
+      box-shadow:0 12px 20px rgba(0,86,255,0.2);
+      align-self:flex-start;
+    }
+    .tab-toggle {
+      display:flex;
+      gap:6px;
+      background:#f2f5ff;
+      padding:4px;
+      border-radius:12px;
+      margin-bottom:16px;
+    }
+    .tab-toggle button {
+      flex:1;
+      border:none;
+      background:transparent;
+      padding:10px 0;
+      border-radius:10px;
+      font-weight:600;
+      font-size:14px;
+      color:var(--ink-sub);
+      cursor:pointer;
+      transition:background 0.2s,color 0.2s;
+    }
+    .tab-toggle button.active {
+      background:#fff;
+      color:var(--ink);
+      box-shadow:0 6px 12px rgba(16,20,24,0.08);
+    }
+    .tab-panel {
+      display:grid;
+      gap:12px;
+    }
+    .tab-panel[hidden] {
+      display:none;
+    }
+    .form-item {
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+    .form-item label {
+      font-size:13px;
+      font-weight:600;
+      color:var(--ink);
+    }
+    .form-item input,
+    .form-item select {
+      padding:12px 14px;
+      border-radius:12px;
+      border:1px solid #d9e0f2;
+      background:#f8f9fc;
+      font-size:14px;
+      color:var(--ink);
+      font-family:inherit;
+    }
+    .form-item select {
+      appearance:none;
+      background-image:url('data:image/svg+xml,%3Csvg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"%3E%3Cpath d="M1.41 0.589966L6 5.16997L10.59 0.589966L12 1.99997L6 7.99997L0 1.99997L1.41 0.589966Z" fill="%23101418"/%3E%3C/svg%3E');
+      background-repeat:no-repeat;
+      background-position:right 12px center;
+      background-size:12px 8px;
+    }
+    .form-inline {
+      display:grid;
+      grid-template-columns:repeat(2, minmax(0,1fr));
+      gap:12px;
+    }
+    .steps {
+      display:flex;
+      flex-direction:column;
+      gap:16px;
+    }
+    .step {
+      display:flex;
+      gap:12px;
+      align-items:flex-start;
+    }
+    .bubble {
+      width:38px;
+      height:38px;
+      border-radius:12px;
+      background:var(--accent-soft);
+      color:var(--accent);
+      display:grid;
+      place-items:center;
+      font-weight:700;
+      flex-shrink:0;
+    }
+    .step strong {
+      display:block;
+      margin-bottom:4px;
+    }
+    .step span {
+      color:var(--ink-sub);
+      font-size:14px;
+      line-height:1.5;
+    }
+    .callout {
+      background:#0f1f3b;
+      color:#fff;
+      border-radius:var(--radius);
+      padding:20px;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+    .callout small {
+      color:rgba(255,255,255,0.7);
+    }
+    .filter-group {
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      margin:12px 0 16px;
+    }
+    .chip {
+      padding:8px 14px;
+      background:#f0f3f9;
+      border-radius:999px;
+      font-size:13px;
+      color:var(--ink-sub);
+      cursor:pointer;
+      transition:.25s;
+    }
+    .chip.active {
+      background:#e0e8ff;
+      color:var(--accent);
+    }
+    .club-card {
+      background:var(--card);
+      border-radius:18px;
+      padding:16px;
+      margin-bottom:12px;
+      border:1px solid #eef0f4;
+      transition:transform .2s;
+    }
+    .club-card:hover { transform:translateY(-2px); }
+    .club-card h4 {
+      margin:0 0 6px;
+      font-size:16px;
+    }
+    .club-card p {
+      margin:0;
+      color:var(--ink-sub);
+      font-size:13px;
+      line-height:1.5;
+    }
+    .badge {
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:4px 10px;
+      border-radius:999px;
+      background:#eef1ff;
+      color:var(--accent);
+      font-size:12px;
+      margin-top:10px;
+    }
+    .messenger-preview {
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+    .bubble-row {
+      display:flex;
+      gap:10px;
+      align-items:flex-end;
+    }
+    .bubble-row.me {
+      justify-content:flex-end;
+    }
+    .chat-bubble {
+      padding:12px 16px;
+      border-radius:16px 16px 4px 16px;
+      background:#fff;
+      box-shadow:0 10px 24px rgba(0,0,0,0.06);
+      font-size:14px;
+      line-height:1.5;
+      max-width:70%;
+    }
+    .bubble-row.me .chat-bubble {
+      background:#1a48ff;
+      color:#fff;
+      border-radius:16px 16px 16px 4px;
+    }
+    footer {
+      position:sticky;
+      bottom:0;
+      background:rgba(255,255,255,0.85);
+      backdrop-filter:blur(16px);
+      border-top:1px solid #e4e7ec;
+    }
+    .nav {
+      display:flex;
+      justify-content:space-around;
+      padding:12px 0 10px;
+      font-size:12px;
+      color:var(--ink-sub);
+    }
+    .nav button {
+      background:none;
+      border:none;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:4px;
+      color:inherit;
+      cursor:pointer;
+      font-weight:600;
+    }
+    .nav button.active {
+      color:var(--accent);
+    }
+    .empty {
+      text-align:center;
+      padding:18px;
+      color:var(--ink-sub);
+      font-size:14px;
+      border:1px dashed #d7deef;
+      border-radius:16px;
+      background:#f8f9fc;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="topbar">
+        <div style="font-weight:700; font-size:18px;">Linkle</div>
+        <button type="button" aria-label="피드백 보내기">
+          💡 <span>베타 피드백</span>
+        </button>
+      </div>
+      <div class="intro">
+        <h1>동아리 매칭 / 교류 플랫폼</h1>
+        <p>동아리 운영진을 위한 맞춤 매칭 - 링클</p>
+      </div>
+    </header>
+
+    <main class="screen">
+      <section id="leader" class="panel" data-screen="home" aria-label="대표 기능">
+        <div class="section-title">운영진 핵심 플로우</div>
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3>프로필 작성 / 매칭</h3>
+              <p class="card-sub">기본 정보와 매칭 조건을 한 번에 저장해 추천까지 자동으로 이어집니다.</p>
+            </div>
+            <button type="button" class="primary-btn">작성</button>
+          </div>
+          <div class="tab-toggle" role="tablist" aria-label="프로필 작성 단계">
+            <button class="active" data-target="profileBasics" role="tab" aria-selected="true">기본 정보</button>
+            <button data-target="matchingPrefs" role="tab" aria-selected="false">매칭 조건</button>
+          </div>
+          <div class="tab-panel" id="profileBasics" role="tabpanel">
+            <div class="form-item">
+              <label for="clubSchool">학교</label>
+              <input type="text" id="clubSchool" name="clubSchool" placeholder="예: 고려대학교">
+            </div>
+            <div class="form-item">
+              <label for="clubDepartment">학과</label>
+              <input type="text" id="clubDepartment" name="clubDepartment" placeholder="예: 경영학과">
+            </div>
+            <div class="form-item">
+              <label for="clubField">활동 분야</label>
+              <select id="clubField" name="clubField">
+                <option value="" selected disabled>선택해 주세요</option>
+                <option value="학술">학술</option>
+                <option value="문화·예술">문화·예술</option>
+                <option value="체육">체육</option>
+                <option value="봉사">봉사</option>
+                <option value="창업">창업</option>
+                <option value="기타">기타</option>
+              </select>
+            </div>
+            <div class="form-inline">
+              <div class="form-item">
+                <label for="clubCapacity">정원</label>
+                <input type="number" id="clubCapacity" name="clubCapacity" placeholder="예: 30" inputmode="numeric">
+              </div>
+              <div class="form-item">
+                <label for="clubCurrent">현재 인원</label>
+                <input type="number" id="clubCurrent" name="clubCurrent" placeholder="예: 18" inputmode="numeric">
+              </div>
+            </div>
+          </div>
+          <div class="tab-panel" id="matchingPrefs" role="tabpanel" hidden>
+            <div class="form-item">
+              <label for="clubMode">대면/비대면 선호</label>
+              <select id="clubMode" name="clubMode">
+                <option value="" selected disabled>선택해 주세요</option>
+                <option value="대면 중심">대면 중심</option>
+                <option value="혼합">혼합</option>
+                <option value="비대면 중심">비대면 중심</option>
+              </select>
+            </div>
+            <div class="form-item">
+              <label for="clubFrequency">교류 횟수</label>
+              <select id="clubFrequency" name="clubFrequency">
+                <option value="" selected disabled>선택해 주세요</option>
+                <option value="주 1회 이하">주 1회 이하</option>
+                <option value="주 1-2회">주 1-2회</option>
+                <option value="주 3회 이상">주 3회 이상</option>
+              </select>
+            </div>
+            <div class="form-item">
+              <label for="clubSchedule">희망 일정</label>
+              <input type="text" id="clubSchedule" name="clubSchedule" placeholder="예: 화·목 19시 이후">
+            </div>
+          </div>
+          <div class="callout" style="margin-top:20px;">
+            <div>
+              <strong>매주 화요일, 추천 매칭 3건 도착</strong>
+              <small>초기에는 직원이 수동 검수 후 발송, 이후 알고리즘 자동화 예정</small>
+            </div>
+            <button type="button" style="align-self:flex-start; padding:10px 16px; border:none; border-radius:12px; background:#fff; color:#0f1f3b; font-weight:600;">매칭 신청하기</button>
+          </div>
+          <div class="steps" style="margin-top:16px;">
+            <div class="step">
+              <div class="bubble">A</div>
+              <div>
+                <strong>소속 정보 입력</strong>
+                <span>학교·학과·활동 분야와 정원, 현재 인원 등 기본 정보를 한 화면에서 빠르게 입력합니다.</span>
+              </div>
+            </div>
+            <div class="step">
+              <div class="bubble">B</div>
+              <div>
+                <strong>매칭 조건 설정</strong>
+                <span>대면/비대면 선호, 교류 횟수, 희망 일정까지 저장하면 자동 추천이 시작됩니다.</span>
+              </div>
+            </div>
+            <div class="step">
+              <div class="bubble">C</div>
+              <div>
+                <strong>추천 확인</strong>
+                <span>매주 화요일 도착하는 추천 동아리를 카드 스택으로 넘겨보고 관심 여부를 표시합니다.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>3. 개인 메신저</h3>
+          <div class="messenger-preview">
+            <div class="bubble-row">
+              <div class="chat-bubble">안녕하세요! 다음주 수요일 저녁에 교류전 어떠세요?</div>
+            </div>
+            <div class="bubble-row me">
+              <div class="chat-bubble">좋아요 🙌 장소는 우리 학교 공용 라운지로 잡을게요.</div>
+            </div>
+            <div class="bubble-row">
+              <div class="chat-bubble">확정되면 라운지 예약 도와드릴게요!</div>
+            </div>
+          </div>
+          <div class="badge">안전장치 · 초대 제한 · 파일 공유</div>
+        </div>
+      </section>
+
+      <section id="explore" class="panel" data-screen="explore" aria-label="탐색 섹션" hidden>
+        <div class="section-title">탐색 & 가입</div>
+        <div class="card">
+          <h3>동아리 통합 검색</h3>
+          <p style="color:var(--ink-sub); font-size:14px; line-height:1.6;">학교, 학과, 활동 카테고리를 기반으로 동아리를 탐색하고 바로 가입 신청까지 이어지는 흐름을 구현합니다.</p>
+          <div class="filter-group" id="filters">
+            <div class="chip active" data-filter="전체">전체</div>
+            <div class="chip" data-filter="문화">문화</div>
+            <div class="chip" data-filter="체육">체육</div>
+            <div class="chip" data-filter="학술">학술</div>
+            <div class="chip" data-filter="봉사">봉사</div>
+            <div class="chip" data-filter="종교">종교</div>
+          </div>
+          <input type="search" placeholder="키워드 검색 (예: 미디어, 밴드)" style="width:100%; padding:14px 16px; border-radius:14px; border:1px solid #d9deeb; font-size:14px;">
+        </div>
+
+        <div id="clubList">
+          <article class="club-card" data-category="문화">
+            <h4>미디어 아트 크루</h4>
+            <p>영상·디자인 협업으로 전시회를 준비하는 창작 동아리</p>
+            <div class="badge">홍익대 · 35명 · 문화</div>
+          </article>
+          <article class="club-card" data-category="체육">
+            <h4>KUBS 농구회</h4>
+            <p>주 2회 학교 체육관에서 연습하고 교내 리그에 참가합니다.</p>
+            <div class="badge">연세대 · 28명 · 체육</div>
+          </article>
+          <article class="club-card" data-category="학술">
+            <h4>데이터 KUBD</h4>
+            <p>데이터 분석 스터디와 기업 협업 프로젝트를 진행하는 학술 모임</p>
+            <div class="badge">서울대 · 42명 · 학술</div>
+          </article>
+          <article class="club-card" data-category="봉사">
+            <h4>빛나눔</h4>
+            <p>지역 아동센터 학습 멘토링과 봉사활동을 운영합니다.</p>
+            <div class="badge">이화여대 · 18명 · 봉사</div>
+          </article>
+        </div>
+        <div id="emptyState" class="empty" hidden>
+          조건에 맞는 동아리가 없어요. 필터를 변경해보세요!
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <nav class="nav" aria-label="하단 내비게이션">
+        <button type="button" class="active" data-target="home">
+          <span>🏠</span>
+          <span>홈</span>
+        </button>
+        <button type="button" data-target="explore">
+          <span>🔍</span>
+          <span>탐색</span>
+        </button>
+        <button type="button">
+          <span>💬</span>
+          <span>메시지</span>
+        </button>
+        <button type="button">
+          <span>👤</span>
+          <span>내 정보</span>
+        </button>
+      </nav>
+    </footer>
+  </div>
+
+  <script>
+    window.addEventListener('DOMContentLoaded', function () {
+      var API_BASE_URL = '';
+      if (typeof window.LINKLE_API_BASE_URL === 'string') {
+        API_BASE_URL = window.LINKLE_API_BASE_URL.replace(/\/+$/, '');
+      }
+      var hasBackend = API_BASE_URL.length > 0;
+
+      var navButtons = document.querySelectorAll('.nav button[data-target]');
+      var screens = document.querySelectorAll('[data-screen]');
+      var chips = document.querySelectorAll('.chip');
+      var emptyState = document.getElementById('emptyState');
+      var searchInput = document.querySelector('input[type="search"]');
+      var createButton = document.querySelector('.card-header .primary-btn');
+      var clubList = document.getElementById('clubList');
+      var schoolInput = document.getElementById('clubSchool');
+      var departmentInput = document.getElementById('clubDepartment');
+      var fieldSelect = document.getElementById('clubField');
+      var capacityInput = document.getElementById('clubCapacity');
+      var currentInput = document.getElementById('clubCurrent');
+      var modeSelect = document.getElementById('clubMode');
+      var frequencySelect = document.getElementById('clubFrequency');
+      var scheduleInput = document.getElementById('clubSchedule');
+      var activeFilter = '전체';
+      var fallbackClubData = [];
+
+      function normalizeClubData(club) {
+        var normalized = {
+          id: null,
+          name: '이름 미정 동아리',
+          description: '',
+          category: '기타',
+          school: '',
+          members: '',
+          capacity: '',
+          badgeText: ''
+        };
+
+        if (!club) {
+          normalized.badgeText = normalized.category;
+          return normalized;
+        }
+
+        if (typeof club.id !== 'undefined' && club.id !== null) {
+          normalized.id = club.id;
+        } else if (typeof club._id !== 'undefined' && club._id !== null) {
+          normalized.id = club._id;
+        }
+
+        if (typeof club.name === 'string' && club.name) {
+          normalized.name = club.name;
+        } else if (typeof club.title === 'string' && club.title) {
+          normalized.name = club.title;
+        }
+
+        if (typeof club.description === 'string') {
+          normalized.description = club.description;
+        } else if (typeof club.summary === 'string') {
+          normalized.description = club.summary;
+        }
+
+        var categoryValue = null;
+        if (typeof club.category === 'string' && club.category) {
+          categoryValue = club.category;
+        } else if (typeof club.field === 'string' && club.field) {
+          categoryValue = club.field;
+        } else if (typeof club.type === 'string' && club.type) {
+          categoryValue = club.type;
+        }
+        if (categoryValue) {
+          normalized.category = categoryValue;
+        }
+
+        var schoolValue = null;
+        if (typeof club.school === 'string' && club.school) {
+          schoolValue = club.school;
+        } else if (typeof club.university === 'string' && club.university) {
+          schoolValue = club.university;
+        }
+        if (schoolValue) {
+          normalized.school = schoolValue;
+        }
+
+        var membersValue = null;
+        if (typeof club.members !== 'undefined' && club.members !== null) {
+          membersValue = club.members;
+        } else if (typeof club.currentMembers !== 'undefined' && club.currentMembers !== null) {
+          membersValue = club.currentMembers;
+        }
+        if (typeof membersValue === 'number' && !isNaN(membersValue)) {
+          normalized.members = membersValue + '명';
+        } else if (typeof membersValue === 'string' && membersValue) {
+          normalized.members = membersValue;
+        }
+
+        var capacityValue = null;
+        if (typeof club.capacity !== 'undefined' && club.capacity !== null) {
+          capacityValue = club.capacity;
+        } else if (typeof club.maxMembers !== 'undefined' && club.maxMembers !== null) {
+          capacityValue = club.maxMembers;
+        }
+        if (typeof capacityValue === 'number' && !isNaN(capacityValue)) {
+          normalized.capacity = '정원 ' + capacityValue + '명';
+        } else if (typeof capacityValue === 'string' && capacityValue) {
+          normalized.capacity = capacityValue;
+        }
+
+        if (typeof club.badgeText === 'string' && club.badgeText) {
+          normalized.badgeText = club.badgeText;
+        } else {
+          var badgeParts = [];
+          if (normalized.school) {
+            badgeParts.push(normalized.school);
+          }
+          if (normalized.members) {
+            badgeParts.push(normalized.members);
+          } else if (normalized.capacity) {
+            badgeParts.push(normalized.capacity);
+          }
+          badgeParts.push(normalized.category);
+          normalized.badgeText = badgeParts.join(' · ');
+        }
+
+        return normalized;
+      }
+
+      function extractClubFromCard(card) {
+        if (!card) {
+          return normalizeClubData(null);
+        }
+        var titleEl = card.querySelector('h4');
+        var descEl = card.querySelector('p');
+        var badgeEl = card.querySelector('.badge');
+        var badgeText = '';
+        if (badgeEl && badgeEl.textContent) {
+          badgeText = badgeEl.textContent.replace(/\s+/g, ' ').trim();
+        }
+        var badgeParts = badgeText ? badgeText.split('·') : [];
+        var schoolPart = badgeParts.length > 0 ? badgeParts[0].replace(/\s+/g, ' ').trim() : '';
+        var memberPart = badgeParts.length > 2 ? badgeParts[1].replace(/\s+/g, ' ').trim() : '';
+        var categoryAttr = card.getAttribute('data-category');
+        var categoryPart = categoryAttr || (badgeParts.length > 0 ? badgeParts[badgeParts.length - 1].replace(/\s+/g, ' ').trim() : '');
+
+        return normalizeClubData({
+          name: titleEl && titleEl.textContent ? titleEl.textContent.replace(/\s+/g, ' ').trim() : '',
+          description: descEl && descEl.textContent ? descEl.textContent.replace(/\s+/g, ' ').trim() : '',
+          category: categoryPart,
+          badgeText: badgeText,
+          school: schoolPart,
+          members: memberPart
+        });
+      }
+
+      if (clubList) {
+        var initialCards = clubList.querySelectorAll('.club-card');
+        for (var i = 0; i < initialCards.length; i++) {
+          fallbackClubData.push(extractClubFromCard(initialCards[i]));
+        }
+      }
+
+      function createClubCardElement(club) {
+        var normalized = normalizeClubData(club);
+        var article = document.createElement('article');
+        article.className = 'club-card';
+        article.setAttribute('data-category', normalized.category);
+        if (normalized.id) {
+          article.setAttribute('data-club-id', normalized.id);
+        }
+
+        var title = document.createElement('h4');
+        title.textContent = normalized.name;
+
+        var description = document.createElement('p');
+        description.textContent = normalized.description || '소개 정보가 아직 없습니다.';
+
+        var badge = document.createElement('div');
+        badge.className = 'badge';
+        badge.textContent = normalized.badgeText || normalized.category;
+
+        article.appendChild(title);
+        article.appendChild(description);
+        article.appendChild(badge);
+        return article;
+      }
+
+      function renderClubCards(clubs, updateFallback) {
+        if (!clubList) {
+          return;
+        }
+        clubList.innerHTML = '';
+        var normalizedList = [];
+        if (!clubs || clubs.length === 0) {
+          updateEmptyState(0);
+          if (updateFallback) {
+            fallbackClubData = normalizedList;
+          }
+          return;
+        }
+        for (var i = 0; i < clubs.length; i++) {
+          var normalized = normalizeClubData(clubs[i]);
+          normalizedList.push(normalized);
+          clubList.appendChild(createClubCardElement(normalized));
+        }
+        if (updateFallback) {
+          fallbackClubData = normalizedList;
+        }
+      }
+
+      function setActiveScreen(targetScreen) {
+        for (var i = 0; i < screens.length; i++) {
+          var section = screens[i];
+          var matches = section.getAttribute('data-screen') === targetScreen;
+          if (matches) {
+            section.removeAttribute('hidden');
+          } else {
+            section.setAttribute('hidden', '');
+          }
+        }
+
+        for (var j = 0; j < navButtons.length; j++) {
+          var btn = navButtons[j];
+          if (!btn.classList) {
+            continue;
+          }
+          var isActive = btn.getAttribute('data-target') === targetScreen;
+          if (isActive) {
+            btn.classList.add('active');
+          } else {
+            btn.classList.remove('active');
+          }
+        }
+      }
+
+      for (var n = 0; n < navButtons.length; n++) {
+        (function (btn) {
+          btn.addEventListener('click', function () {
+            setActiveScreen(btn.getAttribute('data-target'));
+          });
+        })(navButtons[n]);
+      }
+
+      function updateEmptyState(visibleCount) {
+        if (!emptyState) {
+          return;
+        }
+
+        if (visibleCount === 0) {
+          emptyState.removeAttribute('hidden');
+        } else {
+          emptyState.setAttribute('hidden', '');
+        }
+      }
+
+      function applyFilters() {
+        if (!clubList) {
+          updateEmptyState(0);
+          return;
+        }
+        var keyword = '';
+        if (searchInput && typeof searchInput.value === 'string') {
+          keyword = searchInput.value.replace(/^\s+|\s+$/g, '').toLowerCase();
+        }
+
+        var visibleCount = 0;
+        var clubCards = clubList.querySelectorAll('.club-card');
+
+        for (var i = 0; i < clubCards.length; i++) {
+          var card = clubCards[i];
+          var category = card.getAttribute('data-category') || '';
+          var matchesCategory = activeFilter === '전체' || category === activeFilter;
+          var cardText = card.textContent ? card.textContent.toLowerCase() : '';
+          var matchesKeyword = keyword === '' || cardText.indexOf(keyword) !== -1;
+          var shouldShow = matchesCategory && matchesKeyword;
+
+          card.style.display = shouldShow ? 'block' : 'none';
+          if (shouldShow) {
+            visibleCount += 1;
+          }
+        }
+
+        updateEmptyState(visibleCount);
+      }
+
+      for (var c = 0; c < chips.length; c++) {
+        (function (chip) {
+          chip.addEventListener('click', function () {
+            for (var i = 0; i < chips.length; i++) {
+              if (chips[i].classList) {
+                chips[i].classList.remove('active');
+              }
+            }
+            if (chip.classList) {
+              chip.classList.add('active');
+            }
+
+            activeFilter = chip.getAttribute('data-filter') || '전체';
+            applyFilters();
+          });
+        })(chips[c]);
+      }
+
+      if (searchInput) {
+        searchInput.addEventListener('input', applyFilters);
+      }
+
+      var tabToggles = document.querySelectorAll('.tab-toggle');
+
+      for (var t = 0; t < tabToggles.length; t++) {
+        (function (toggle) {
+          var buttons = toggle.querySelectorAll('button');
+          var card = toggle.closest('.card');
+          var panels = card ? card.querySelectorAll('.tab-panel') : [];
+
+          function setActiveTab(targetId) {
+            for (var i = 0; i < buttons.length; i++) {
+              var btn = buttons[i];
+              var isActive = btn.getAttribute('data-target') === targetId;
+              if (isActive) {
+                btn.classList.add('active');
+                btn.setAttribute('aria-selected', 'true');
+              } else {
+                btn.classList.remove('active');
+                btn.setAttribute('aria-selected', 'false');
+              }
+            }
+
+            for (var j = 0; j < panels.length; j++) {
+              var panel = panels[j];
+              if (panel.id === targetId) {
+                panel.removeAttribute('hidden');
+              } else {
+                panel.setAttribute('hidden', '');
+              }
+            }
+          }
+
+          for (var b = 0; b < buttons.length; b++) {
+            (function (button) {
+              button.addEventListener('click', function () {
+                setActiveTab(button.getAttribute('data-target'));
+              });
+            })(buttons[b]);
+          }
+
+          var current = toggle.querySelector('button.active');
+          if (current) {
+            setActiveTab(current.getAttribute('data-target'));
+          }
+        })(tabToggles[t]);
+      }
+
+      function resetClubForm() {
+        if (schoolInput) {
+          schoolInput.value = '';
+        }
+        if (departmentInput) {
+          departmentInput.value = '';
+        }
+        if (fieldSelect) {
+          fieldSelect.selectedIndex = 0;
+        }
+        if (capacityInput) {
+          capacityInput.value = '';
+        }
+        if (currentInput) {
+          currentInput.value = '';
+        }
+        if (modeSelect) {
+          modeSelect.selectedIndex = 0;
+        }
+        if (frequencySelect) {
+          frequencySelect.selectedIndex = 0;
+        }
+        if (scheduleInput) {
+          scheduleInput.value = '';
+        }
+      }
+
+      function fetchClubsFromBackend() {
+        if (!hasBackend) {
+          return;
+        }
+        fetch(API_BASE_URL + '/clubs', { method: 'GET' })
+          .then(function (response) {
+            if (!response.ok) {
+              throw new Error('HTTP ' + response.status);
+            }
+            var contentType = response.headers ? response.headers.get('content-type') : '';
+            if (contentType && contentType.indexOf('application/json') === -1) {
+              return [];
+            }
+            return response.json();
+          })
+          .then(function (data) {
+            var clubs = [];
+            if (Object.prototype.toString.call(data) === '[object Array]') {
+              clubs = data;
+            } else if (data && typeof data === 'object') {
+              if (Object.prototype.toString.call(data.items) === '[object Array]') {
+                clubs = data.items;
+              } else if (Object.prototype.toString.call(data.data) === '[object Array]') {
+                clubs = data.data;
+              }
+            }
+            if (clubs.length === 0 && fallbackClubData.length > 0) {
+              renderClubCards(fallbackClubData, false);
+            } else {
+              renderClubCards(clubs, true);
+            }
+            applyFilters();
+          })
+          .catch(function (error) {
+            console.warn('클럽 목록을 불러오지 못했습니다:', error);
+            if (fallbackClubData.length > 0) {
+              renderClubCards(fallbackClubData, false);
+              applyFilters();
+            } else {
+              updateEmptyState(0);
+            }
+          });
+      }
+
+      if (createButton && clubList) {
+        createButton.addEventListener('click', function () {
+          var schoolValue = schoolInput && typeof schoolInput.value === 'string' ? schoolInput.value.trim() : '';
+          var departmentValue = departmentInput && typeof departmentInput.value === 'string' ? departmentInput.value.trim() : '';
+          var fieldValue = fieldSelect ? fieldSelect.value : '';
+          var capacityValue = capacityInput && typeof capacityInput.value === 'string' ? capacityInput.value.trim() : '';
+          var currentValue = currentInput && typeof currentInput.value === 'string' ? currentInput.value.trim() : '';
+
+          if (!schoolValue && !departmentValue) {
+            alert('학교 또는 학과 정보를 입력해 주세요.');
+            return;
+          }
+
+          if (!fieldValue) {
+            alert('활동 분야를 선택해 주세요.');
+            return;
+          }
+
+          var clubName = (departmentValue ? departmentValue : fieldValue) + ' 동아리';
+          var descriptionParts = [];
+
+          if (schoolValue && departmentValue) {
+            descriptionParts.push(schoolValue + ' ' + departmentValue + ' 기반');
+          } else if (schoolValue) {
+            descriptionParts.push(schoolValue + ' 기반');
+          }
+
+          descriptionParts.push(fieldValue + ' 분야 활동');
+
+          if (currentValue) {
+            descriptionParts.push('현재 ' + currentValue + '명 참여');
+          }
+
+          var description = descriptionParts.join(' · ');
+          if (description === '') {
+            description = '새로 등록된 ' + fieldValue + ' 동아리입니다.';
+          }
+
+          var modeValue = modeSelect && typeof modeSelect.value === 'string' ? modeSelect.value : '';
+          var frequencyValue = frequencySelect && typeof frequencySelect.value === 'string' ? frequencySelect.value : '';
+          var scheduleValue = scheduleInput && typeof scheduleInput.value === 'string' ? scheduleInput.value.trim() : '';
+
+          var capacityNumber = null;
+          if (capacityValue) {
+            var parsedCapacity = parseInt(capacityValue, 10);
+            if (!isNaN(parsedCapacity)) {
+              capacityNumber = parsedCapacity;
+            }
+          }
+
+          var currentNumber = null;
+          if (currentValue) {
+            var parsedCurrent = parseInt(currentValue, 10);
+            if (!isNaN(parsedCurrent)) {
+              currentNumber = parsedCurrent;
+            }
+          }
+
+          var matchPreferences = {};
+          if (modeValue) {
+            matchPreferences.mode = modeValue;
+          }
+          if (frequencyValue) {
+            matchPreferences.frequency = frequencyValue;
+          }
+          if (scheduleValue) {
+            matchPreferences.schedule = scheduleValue;
+          }
+
+          var payload = {
+            name: clubName,
+            description: description,
+            school: schoolValue,
+            department: departmentValue,
+            field: fieldValue,
+            category: fieldValue
+          };
+
+          if (capacityNumber !== null) {
+            payload.capacity = capacityNumber;
+            payload.maxMembers = capacityNumber;
+          }
+
+          if (currentNumber !== null) {
+            payload.currentMembers = currentNumber;
+            payload.members = currentNumber;
+          }
+
+          if (matchPreferences.mode || matchPreferences.frequency || matchPreferences.schedule) {
+            payload.matchPreferences = matchPreferences;
+          }
+
+          if (hasBackend) {
+            fetch(API_BASE_URL + '/clubs', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            })
+              .then(function (response) {
+                if (!response.ok) {
+                  throw new Error('HTTP ' + response.status);
+                }
+                var contentType = response.headers ? response.headers.get('content-type') : '';
+                if (contentType && contentType.indexOf('application/json') !== -1) {
+                  return response.json();
+                }
+                return {};
+              })
+              .then(function () {
+                resetClubForm();
+                setActiveScreen('explore');
+                fetchClubsFromBackend();
+                alert('동아리 정보가 서버에 저장되었습니다.');
+              })
+              .catch(function (error) {
+                console.error('동아리 정보를 전송하지 못했습니다:', error);
+                alert('서버에 동아리 정보를 전달하지 못했습니다. 네트워크 또는 API 구성을 확인해 주세요.');
+              });
+            return;
+          }
+
+          var normalizedClub = normalizeClubData({
+            name: clubName,
+            description: description,
+            category: fieldValue,
+            school: schoolValue,
+            members: currentNumber !== null ? currentNumber : currentValue,
+            capacity: capacityNumber !== null ? capacityNumber : capacityValue
+          });
+
+          fallbackClubData.unshift(normalizedClub);
+          var newCard = createClubCardElement(normalizedClub);
+          if (clubList.firstChild) {
+            clubList.insertBefore(newCard, clubList.firstChild);
+          } else {
+            clubList.appendChild(newCard);
+          }
+
+          resetClubForm();
+          applyFilters();
+          setActiveScreen('explore');
+        });
+      }
+
+      function initMessenger() {
+        var callouts = document.querySelectorAll('.messenger-preview .chat-bubble');
+        for (var i = 0; i < callouts.length; i++) {
+          callouts[i].setAttribute('role', 'text');
+        }
+      }
+
+      initMessenger();
+      setActiveScreen('home');
+      applyFilters();
+      fetchClubsFromBackend();
+    });
+  </script>
+</body>
+</html>
